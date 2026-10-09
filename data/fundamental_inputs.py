@@ -1,6 +1,6 @@
 """Turns macro data into fundamental factor values (-1..+1) for each asset.
-Anything without a real source stays None (earnings, AI/semis, credit, safe-haven, central-bank buying,
-risk sentiment) so coverage honestly shows what the score is based on.
+Anything without a real source stays None (earnings, AI/semis, central-bank buying) so coverage honestly
+shows what the score is based on.
 
 Double counting: the backend's Fed stance is derived from the 2Y LEVEL. So fed_policy_expectations uses that
 level, while the yield factors use the DAY CHANGE only. They are related but not the same signal."""
@@ -29,6 +29,8 @@ def release_impacts(events, asset: str, now: datetime, regime: str = REGIME, loo
     for e in events:
         if e.actual is None or e.forecast is None or e.t_utc > now:
             continue
+        if e.forecast == 0 and (e.previous or 0) != 0:
+            continue  # feed uses 0 as "no forecast" placeholder (e.g. ADP weekly); never score it as a surprise
         age = (now - e.t_utc).total_seconds() / 86400
         if age > lookback_days:
             continue

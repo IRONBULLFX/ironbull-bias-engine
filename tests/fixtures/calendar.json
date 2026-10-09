@@ -1,0 +1,6 @@
+{"ok":true,"sastOffsetMin":120,"source":"jblanked-live","liveSrc":"forex-factory/calendar/range/","liveError":null,"count":3,
+ "_note":"PARTIAL capture of the live /api/calendar on 2026-10-09 (3 of 7 events)",
+ "events":[
+ {"id":"average-hourly-earnings-m-m-1790944200000","name":"Average Hourly Earnings m/m","t":1790944200000,"forecast":0.3,"previous":0.3,"actual":0.1,"unit":"%","impact":"high","group":"labor"},
+ {"id":"non-farm-employment-change-1790944200000","name":"Non-Farm Employment Change","t":1790944200000,"forecast":89,"previous":133,"actual":29,"unit":"K","impact":"high","group":"labor"},
+ {"id":"unemployment-rate-1790944200000","name":"Unemployment Rate","t":1790944200000,"forecast":4.1,"previous":4.1,"actual":4.2,"unit":"%","impact":"high","group":"labor"}]}

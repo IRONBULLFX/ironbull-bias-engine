@@ -61,6 +61,10 @@ main{max-width:1280px;margin:0 auto;padding:20px 24px 48px}
 .card:hover{border-color:var(--line2)}
 .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
 .mk{font-family:var(--serif);font-size:28px;font-weight:700;line-height:1}
+.mk,.bias,.event-name{font-variant-numeric:lining-nums;font-feature-settings:'lnum' 1}
+.lean{font-size:10.5px;color:var(--sub);margin:-4px 0 6px;letter-spacing:.3px}
+.link{color:var(--teal);text-decoration:none;font-size:12px}.link:hover{text-decoration:underline}
+.linkbtn{background:none;border:none;padding:0;color:var(--sub);font-size:11.5px;cursor:pointer;text-decoration:underline}
 .mk-sub{font-size:11px;color:var(--sub);margin-top:4px;letter-spacing:.3px}
 .price{text-align:right;font-family:var(--mono);font-size:15px}
 .price small{display:block;font-size:10px;color:var(--faint);margin-top:3px}
@@ -127,6 +131,7 @@ svg text{font-family:var(--mono)}
   .bar,main{padding-left:16px;padding-right:16px}
   .engines,.tfs{grid-template-columns:1fr}
   .agree .small{text-align:left!important;flex-basis:100%}
+  #hfm-form .code-row input{flex-basis:100%}
   .chip{white-space:normal}
   .mk{font-size:25px}.d-head .mk{font-size:32px}
   .meta{gap:10px;font-size:10.5px}
@@ -158,8 +163,19 @@ svg text{font-family:var(--mono)}
       </div>
       <div class="panel">
         <div class="eyebrow">Member access</div>
-        <div class="small" id="code-msg" style="margin-top:6px">Enter your access code to see your technical bias and upload charts.</div>
-        <div class="code-row" id="code-form">
+        <div class="small" id="code-msg" style="margin-top:6px">Ironbull HFM clients: verify your account to see your technical bias and upload charts.</div>
+        <div id="hfm-form">
+          <div class="code-row">
+            <input id="hfm-acct" inputmode="numeric" autocomplete="off" placeholder="HFM account number" aria-label="HFM trading account number">
+            <input id="hfm-email" type="email" autocomplete="email" placeholder="Email used with HFM" aria-label="Email registered with HFM">
+            <button class="btn primary" id="hfm-btn">Verify</button>
+          </div>
+          <div class="small" style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+            <a class="link hide" id="hfm-signup" target="_blank" rel="noopener">Not with HFM yet? Open your account through Ironbull</a>
+            <button class="linkbtn" id="show-code">I have an access code</button>
+          </div>
+        </div>
+        <div class="code-row hide" id="code-form">
           <input id="code-in" type="password" autocomplete="off" placeholder="Access code" aria-label="Access code">
           <button class="btn primary" id="code-btn">Unlock</button>
         </div>
@@ -260,8 +276,12 @@ function api(path, opts){
 }
 function load(){
   return api("/api/bias").then(function(res){
-    if(res.status===401 && state.code){
-      setCode(null); setCodeMsg("That access code was not accepted.", true); return load();
+    if((res.status===401 || res.status===503) && state.code){
+      var why = (res.body && res.body.detail) || "That access code was not accepted.";
+      if(res.status===401) setCode(null);
+      setCodeMsg(why.charAt(0).toUpperCase()+why.slice(1)+".", true);
+      if(res.status===401) return load();
+      var keep=state.code; state.code=null; return load().then(function(){ state.code=keep; });
     }
     if(res.status!==200 || !res.body.ok) throw new Error("HTTP "+res.status);
     state.data = res.body; state.lastOk = new Date(); state.error = null;
@@ -285,7 +305,22 @@ $("code-btn").onclick = function(){
   setCode(v); $("code-in").value=""; setCodeMsg("Checking…"); load();
 };
 $("code-in").addEventListener("keydown", function(e){ if(e.key==="Enter") $("code-btn").click(); });
-$("code-out").onclick = function(){ setCode(null); setCodeMsg("Enter your access code to see your technical bias and upload charts."); load(); };
+$("show-code").onclick = function(){ $("code-form").classList.toggle("hide"); };
+$("hfm-btn").onclick = function(){
+  var acct=$("hfm-acct").value.replace(/\s+/g,""), email=$("hfm-email").value.trim();
+  if(!/^\d{4,12}$/.test(acct)){ setCodeMsg("Enter your HFM trading account number (digits only).", true); return; }
+  if(email.indexOf("@")<1){ setCodeMsg("Enter the email you registered with HFM.", true); return; }
+  var b=$("hfm-btn"); b.disabled=true; b.textContent="Checking…"; setCodeMsg("Checking your account with HFM…");
+  fetch(API_BASE+"/api/member/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({account:acct,email:email})})
+    .then(function(r){ return r.json().catch(function(){return {};}).then(function(j){ return {status:r.status, body:j}; }); })
+    .then(function(res){
+      b.disabled=false; b.textContent="Verify";
+      if(res.status===200 && res.body.code){ setCode(res.body.code); $("hfm-acct").value=""; $("hfm-email").value=""; setCodeMsg("Verified. Welcome."); load(); }
+      else { setCodeMsg(res.body.detail || ("Verification failed (HTTP "+res.status+")."), true); }
+    }).catch(function(){ b.disabled=false; b.textContent="Verify"; setCodeMsg("Network error, try again.", true); });
+};
+$("hfm-email").addEventListener("keydown", function(e){ if(e.key==="Enter") $("hfm-btn").click(); });
+$("code-out").onclick = function(){ setCode(null); setCodeMsg("Signed out on this device."); load(); };
 
 /* ---------------- render: header + banners ---------------- */
 function tickClock(){
@@ -329,20 +364,33 @@ function renderEvent(){
     ' · Forecast <span class="mono">'+esc(ev.forecast==null?"—":ev.forecast)+'</span> vs previous <span class="mono">'+esc(ev.previous==null?"—":ev.previous)+'</span>'+
     '<br><span class="faint">The actual number is unknown until release. Consensus is not a fact.</span>';
 }
+var codeFormInit=false;
 function renderCodeBox(){
   var d=state.data, on=!!(state.code && d && d.upload_limit!=null);
-  $("code-form").classList.toggle("hide", on);
+  var hfmOn = !!(d && d.hfm_verification);
+  $("hfm-form").classList.toggle("hide", on || !hfmOn);
+  if(!codeFormInit && d){ codeFormInit=true; if(!hfmOn){ $("code-form").classList.remove("hide"); setCodeMsg("Enter your access code to see your technical bias and upload charts."); } }
+  if(on) $("code-form").classList.add("hide");
   $("code-on").classList.toggle("hide", !on);
-  if(on){ $("code-usage").textContent = "Unlocked · "+d.uploads_today+" / "+d.upload_limit+" chart reads today"; setCodeMsg("Your technical bias uses only the charts you upload."); }
+  if(d && d.hfm_signup_url){ var a=$("hfm-signup"); a.href=d.hfm_signup_url; a.classList.remove("hide"); }
+  if(on){
+    var who = !d.member ? "Unlocked" : d.member.kind==="hfm" ? "HFM "+d.member.account_masked : "Admin";
+    $("code-usage").textContent = who+" · "+d.uploads_today+" / "+d.upload_limit+" chart reads today";
+    if(!$("code-msg").style.color) setCodeMsg("Your technical bias uses only the charts you upload.");
+  }
 }
 
 /* ---------------- render: home cards ---------------- */
+function leanText(e){
+  if(!e || e.score==null || e.bias!=="NEUTRAL" || Math.abs(e.score)<15) return "";
+  return '<div class="lean">leaning '+(e.score<0?"bearish":"bullish")+'</div>';
+}
 function engineBox(label, e, emptyHint){
   var na = !e || e.score==null;
   var conf = e && e.confidence ? e.confidence.label : null;
   return '<div class="eng"><div class="eyebrow">'+label+'</div>'+
     (na ? '<div class="bias na">'+esc(emptyHint || "DATA UNAVAILABLE")+'</div>'
-        : '<div class="bias" style="color:'+biasColor(e.bias)+'">'+esc(title(e.bias))+'</div>')+
+        : '<div class="bias" style="color:'+biasColor(e.bias)+'">'+esc(title(e.bias))+'</div>'+leanText(e))+
     scoreBar(na?null:e.score)+
     '<div class="eng-foot"><span>'+(na?"—":fmtScore(e.score))+'</span><span>'+(na? (e? Math.round((e.coverage||0)*100)+"% data" : "") : esc(conf||"")+" · "+Math.round(e.coverage*100)+"% data")+'</span></div></div>';
 }
@@ -445,7 +493,7 @@ function renderDetail(){
   var h=state.history[a], cp=chartPrice(t);
   var techBody;
   if(!state.code){
-    techBody='<p class="small">Unlock with your access code on the main page to upload charts and see your technical bias.</p>';
+    techBody='<p class="small">Verify your Ironbull HFM account on the main page to upload charts and see your technical bias.</p>';
   } else {
     techBody = '<div class="big-bias">'+(t.score==null?'<span class="bias na">'+esc(techHint(t))+'</span>':'<span class="bias" style="color:'+biasColor(t.bias)+'">'+esc(title(t.bias))+'</span><span class="mono">'+fmtScore(t.score)+'</span>')+'</div>'+
       scoreBar(t.score)+
@@ -462,7 +510,7 @@ function renderDetail(){
     '<div class="cols">'+
       '<div>'+
         '<div class="panel sec"><h3><span class="dot ok"></span>Fundamental bias · automatic</h3>'+
-          (f.score==null?'<div class="bias na">DATA UNAVAILABLE</div>':'<div class="big-bias"><span class="bias" style="color:'+biasColor(f.bias)+'">'+esc(title(f.bias))+'</span><span class="mono">'+fmtScore(f.score)+'</span></div>')+
+          (f.score==null?'<div class="bias na">DATA UNAVAILABLE</div>':'<div class="big-bias"><span class="bias" style="color:'+biasColor(f.bias)+'">'+esc(title(f.bias))+'</span><span class="mono">'+fmtScore(f.score)+'</span></div>'+leanText(f))+
           scoreBar(f.score)+
           '<div class="kv"><span>Data coverage: <b>'+Math.round((f.coverage||0)*100)+'%</b></span>'+(f.confidence?'<span>Evidence: <b>'+esc(f.confidence.label)+'</b></span>':'')+'<span>Updated <b>'+esc(ago(state.data.status.last_calculation))+'</b></span></div>'+
           '<div style="margin-top:14px"><div class="eyebrow" style="margin-bottom:6px">Why is this the bias today?</div>'+whyBlock(f,"fundamental")+'</div>'+
@@ -509,7 +557,10 @@ function upload(asset, tf, file){
     state.uploading[key]=false;
     var b=res.body||{};
     if(res.status===200){
-      state.flash[key] = b.accepted ? {ok:true,msg:"Chart read and scored."} : {ok:false,msg:"Not used: "+(b.reject_reason||"unreadable")};
+      var scored = b.accepted && b.technical && b.technical.timeframes && b.technical.timeframes[tf] && b.technical.timeframes[tf].score!=null;
+      if(scored) state.flash[key] = {ok:true,msg:"Chart read and scored."};
+      else if(b.accepted) delete state.flash[key];   // reason is shown in the box from the engine
+      else state.flash[key] = {ok:false,msg:"Not used: "+(b.reject_reason||"unreadable")};
       if(state.data){ state.data.markets[asset].technical=b.technical; state.data.markets[asset].agreement=b.agreement; state.data.uploads_today=b.uploads_today; }
     } else if(res.status===401){ setCode(null); state.flash[key]={ok:false,msg:"Access code no longer valid."}; }
     else { state.flash[key]={ok:false,msg:(b.detail||("Upload failed (HTTP "+res.status+")"))}; }

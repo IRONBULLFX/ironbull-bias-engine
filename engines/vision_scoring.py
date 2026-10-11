@@ -13,6 +13,8 @@ POS = {"above", "below", "unknown"}
 STACK = {"bullish", "bearish", "mixed", "unknown"}
 HIST = {"positive", "negative", "unknown"}
 LEVEL_TYPES = {"support", "resistance", "supply", "demand"}
+MISSING_HINT = {"structure": "a clearer swing structure (zoom out)", "ema_trend": "20/50/200 EMAs",
+                "momentum": "RSI or MACD", "premium_discount": "visible swing highs/lows"}
 TF_ALIASES = {"M15": "M15", "15M": "M15", "15": "M15", "H1": "H1", "1H": "H1", "60": "H1", "60M": "H1",
               "H4": "H4", "4H": "H4", "240": "H4", "D1": "D1", "1D": "D1", "D": "D1", "DAILY": "D1"}
 SIGN = {"bullish": 1, "bearish": -1, "above": 1, "below": -1, "positive": 1, "negative": -1}
@@ -37,11 +39,10 @@ def validate_reading(raw, asset: str, tf: str, uploaded_at: datetime, now: datet
     seen_tf = raw.get("timeframe_seen")
     if seen_tf is not None:
         norm = TF_ALIASES.get(str(seen_tf).strip().upper())
-        if norm != tf:
-            return None, f"expected {tf} chart but image shows {seen_tf}"
-    seen_ins = raw.get("instrument_seen")
-    if seen_ins is not None and str(seen_ins).strip().upper().replace(" ", "") not in {a.replace(" ", "") for a in INSTRUMENT_ALIASES[asset]}:
-        return None, f"expected {asset} chart but image shows {seen_ins}"
+        if norm is not None and norm != tf:     # unknown label formats are accepted; only a clearly different TF is rejected
+            return None, f"uploaded as {tf} but the chart shows {seen_tf}"
+    # The chart's symbol name is deliberately NOT checked: brokers name the same market differently
+    # (US Tech 100 Cash, USTEC, NAS100, DXY, DX1!...). The market the member chose is the market analysed.
     ax = raw.get("price_axis") or {}
     last, lo, hi = _num(ax.get("last_price")), _num(ax.get("visible_low")), _num(ax.get("visible_high"))
     if ax.get("visible") is not True or None in (last, lo, hi) or not lo < hi:
@@ -74,7 +75,7 @@ def validate_reading(raw, asset: str, tf: str, uploaded_at: datetime, now: datet
             levels.append({"type": lv["type"], "price": p})
     return {"last": last, "trend": tr, "sequence": seq, "bos": bos, "choch": choch, "swing_high": sh, "swing_low": sl,
             "ema": e, "ema_stack": stack, "rsi": rsi, "macd_hist": hist, "levels": levels[:12],
-            "instrument_visible": seen_ins is not None, "age_hours": round(age_h, 2)}, None
+            "age_hours": round(age_h, 2)}, None
 
 
 def chart_factors(f: dict) -> list[dict]:
@@ -126,6 +127,11 @@ def technical_from_charts(readings: dict, asset: str, now: datetime) -> dict:
             continue
         score, cov, _, rows = weighted_score(chart_factors(feats), MIN_TECH_COVERAGE)
         tf_rows[tf] = {"score": score, "coverage": cov, "factors": rows, "levels": feats["levels"], "last_price": feats["last"]}
+        if score is None:
+            missing = [MISSING_HINT[r["name"]] for r in rows if r["status"] == "missing"]
+            why = "chart read, but too little visible to score. Add " + ", ".join(missing)
+            tf_rows[tf]["reason"] = why
+            rejections[tf] = why
         tf_scores.append({"name": tf, "weight": w, "value": None if score is None else score / 100, "evidence": f"{tf} chart score {score}"})
         if score is not None:
             fresh.append(max(0.0, 1 - feats["age_hours"] / CHART_TTL_HOURS[tf]))

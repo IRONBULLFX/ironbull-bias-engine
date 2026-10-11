@@ -59,6 +59,7 @@ main{max-width:1280px;margin:0 auto;padding:20px 24px 48px}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:18px 20px;display:flex;flex-direction:column;gap:14px;cursor:pointer;transition:border-color .15s}
 .card:hover{border-color:var(--line2)}
+.grid > .card:last-child:nth-child(odd){grid-column:1/-1}
 .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
 .mk{font-family:var(--serif);font-size:28px;font-weight:700;line-height:1}
 .mk,.bias,.event-name{font-variant-numeric:lining-nums;font-feature-settings:'lnum' 1}
@@ -194,7 +195,7 @@ svg text{font-family:var(--mono)}
     </div>
     <div class="grid" id="grid"></div>
     <p class="foot-note">
-      Fundamental bias is calculated automatically from US economic releases, Treasury and real yields, the Fed stance, VIX and credit spreads.
+      Fundamental bias is calculated automatically from US economic releases, Treasury and real yields, the Fed stance, VIX, credit spreads and, for oil, weekly EIA inventories, production and the broad dollar.
       Technical bias comes from the charts you upload. Claude reads each screenshot and the engine scores it, so treat prices read from a chart as approximate.
       Scores run from −100 to +100 and measure the weight of evidence: Bullish/Bearish from ±15, Strongly from ±50. The daily bias blends both engines 50/50, and when they point opposite ways it says stand aside. They are not probabilities of a winning trade, and the weights are starting assumptions that have not been validated.
       Educational analysis only, not financial advice.
@@ -211,12 +212,13 @@ svg text{font-family:var(--mono)}
 var API_BASE = "https://web-production-8c0b1.up.railway.app";
 (function(){ try{ var q=new URLSearchParams(location.search).get("api"); if(q && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(q)) API_BASE=q; }catch(e){} })(); // local testing only
 
-var ASSETS = ["USD","XAUUSD","US30","NASDAQ"];
+var ASSETS = ["USD","XAUUSD","US30","NASDAQ","USOIL"];
 var META = {
   USD:{name:"USD", sub:"US Dollar · charts: DXY", chart:"DXY"},
   XAUUSD:{name:"XAUUSD", sub:"Gold spot", chart:"XAUUSD"},
   US30:{name:"US30", sub:"Dow Jones Industrial Average", chart:"US30"},
-  NASDAQ:{name:"NASDAQ", sub:"Nasdaq-100 · NAS100", chart:"NAS100"}
+  NASDAQ:{name:"NASDAQ", sub:"Nasdaq-100 · NAS100", chart:"NAS100"},
+  USOIL:{name:"USOIL", sub:"WTI crude oil", chart:"USOIL / WTI"}
 };
 var TFS = ["D1","H4","H1","M15"];
 var TF_WEIGHT = {D1:"40%",H4:"30%",H1:"20%",M15:"10%"};
@@ -229,6 +231,9 @@ var LABEL = {
   growth_outlook:"Growth outlook", earnings_trend:"Earnings trend", labour_consumer:"Labour & consumer", credit_conditions:"Credit conditions",
   risk_sentiment:"Risk sentiment", yield_trend_10y:"10Y yield trend", mega_cap_earnings:"Mega-cap earnings",
   ai_semis_momentum:"AI / semiconductor momentum", inflation_trend:"Inflation trend",
+  inventory_change:"Crude inventories (EIA, weekly)", production_trend:"US crude production (EIA)",
+  supply_geopolitics:"Supply / OPEC / geopolitics",
+  dollar_strength:"US dollar (broad index)",
   structure:"Market structure", ema_trend:"EMA trend (20/50/200)", momentum:"Momentum (RSI / MACD)", premium_discount:"Premium / discount"
 };
 var AGREE_STYLE = {

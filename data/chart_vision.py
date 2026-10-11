@@ -34,7 +34,7 @@ Rules:
 timeframe_seen must be one of "M15","H1","H4","D1" or null. Only list key_levels that are clearly drawn or obvious."""
 
 MARKET_NAME = {"USD": "the US Dollar Index (DXY)", "XAUUSD": "gold (XAUUSD)", "US30": "the Dow Jones (US30)",
-               "NASDAQ": "the Nasdaq-100 (NAS100)"}
+               "NASDAQ": "the Nasdaq-100 (NAS100)", "USOIL": "WTI crude oil (USOIL)"}
 
 MAGIC = {b"\x89PNG\r\n\x1a\n": "image/png", b"\xff\xd8\xff": "image/jpeg", b"RIFF": "image/webp", b"GIF8": "image/gif"}
 

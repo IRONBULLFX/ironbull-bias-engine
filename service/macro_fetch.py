@@ -1,5 +1,5 @@
 """Collects every fundamental input. Blocking (urllib), so the app runs it in a worker thread."""
-from data.fred import market_stress, real_yields
+from data.fred import market_stress, oil_data, real_yields
 from data.macro_client import MacroClient
 
 
@@ -12,7 +12,7 @@ def collect_macro(client: MacroClient) -> tuple[dict, float]:
         if r.error:
             errors[key] = r.error + (" (last good data used)" if r.stale else "")
             penalties += 1
-    for key, fn in (("real", real_yields), ("stress", market_stress)):
+    for key, fn in (("real", real_yields), ("stress", market_stress), ("oil", oil_data)):
         macro[key], err = fn()
         if err:
             errors[key] = err

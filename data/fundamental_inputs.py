@@ -5,7 +5,7 @@ shows what the score is based on.
 Double counting: the backend's Fed stance is derived from the 2Y LEVEL. So fed_policy_expectations uses that
 level, while the yield factors use the DAY CHANGE only. They are related but not the same signal."""
 from datetime import datetime, timedelta
-from config.settings import SURPRISE_SCALE, REGIME, RELEASE_LOOKBACK_DAYS
+from config.settings import SURPRISE_SCALE, REGIME, RELEASE_LOOKBACK_DAYS, OIL_SCALES
 from engines.surprise import surprise, asset_impact, lookup_meta, ASSET_SENSITIVITY
 
 IMPACT_WEIGHT = {"high": 1.0, "medium": 0.5, "low": 0.2}
@@ -72,7 +72,8 @@ def credit_stress(st):
     return _clamp(((st["hy_oas"] - 4.0) / 1.5) * 0.7 + ((st["hy_oas"] - st["hy_oas_prev"]) / 0.15) * 0.3)
 
 
-def build_factors(asset: str, now: datetime, events=None, yields=None, fed=None, real=None, regime: str = REGIME, stress=None):
+def build_factors(asset: str, now: datetime, events=None, yields=None, fed=None, real=None, regime: str = REGIME, stress=None,
+                  oil=None):
     events = events or []
     imp = release_impacts(events, asset, now, regime)
     cal = "macro backend /api/calendar"
@@ -114,6 +115,25 @@ def build_factors(asset: str, now: datetime, events=None, yields=None, fed=None,
         if yields and yields.get("y10") is not None and yields.get("prev10") is not None:
             d = yields["y10"] - yields["prev10"]
             F["yield_trend_10y"] = _f(_clamp(-d / 0.10), f"10Y {yields['y10']:.2f}% vs prev {yields['prev10']:.2f}% ({d * 100:+.0f}bp), rising yields pressure growth stocks", "macro backend /api/yields")
+    elif asset == "USOIL":
+        F["growth_outlook"] = cat("growth")
+        if oil and oil.get("stocks") is not None and oil.get("stocks_prev") is not None:
+            d = oil["stocks"] - oil["stocks_prev"]                      # thousand barrels
+            F["inventory_change"] = _f(_clamp(-d / OIL_SCALES["inventory_kbbl"]),
+                                       f"EIA crude stocks ex-SPR {oil['stocks'] / 1000:.1f}M bbl, {d / 1000:+.1f}M w/w "
+                                       f"({'draw supports price' if d < 0 else 'build weighs on price'}); change vs prior week, no consensus",
+                                       "FRED WCESTUS1 (EIA)", oil.get("stocks_date"))
+        if oil and oil.get("production") is not None and oil.get("production_prev") is not None:
+            d = oil["production"] - oil["production_prev"]              # thousand barrels/day
+            F["production_trend"] = _f(_clamp(-d / OIL_SCALES["production_kbd"]),
+                                       f"US crude output {oil['production'] / 1000:.2f}M b/d ({d:+.0f}k b/d w/w), rising output is bearish",
+                                       "FRED WCRFPUS2 (EIA)", oil.get("production_date"))
+        if oil and oil.get("dollar") and oil.get("dollar_prev"):
+            pct = (oil["dollar"] / oil["dollar_prev"] - 1) * 100
+            F["dollar_strength"] = _f(_clamp(-pct / OIL_SCALES["dollar_pct"]),
+                                   f"Broad dollar index {oil['dollar']:.2f} ({pct:+.2f}%), a stronger dollar is a headwind for oil",
+                                   "FRED DTWEXBGS", oil.get("dollar_date"))
+        F["supply_geopolitics"] = _f(None, "no data", "none yet")
     if stress:
         vs, cs = vix_stress(stress), credit_stress(stress)
         vx = f"VIX {stress['vix']:.1f} (prev {stress['vix_prev']:.1f})"
@@ -128,4 +148,6 @@ def build_factors(asset: str, now: datetime, events=None, yields=None, fed=None,
             F["risk_sentiment"] = _f(-vs, f"{vx}, fear is a headwind, {note}", "FRED VIXCLS", stress["vix_date"])
         elif asset == "NASDAQ":
             F["risk_sentiment"] = _f(-vs, f"{vx}, fear is a headwind, {note}", "FRED VIXCLS", stress["vix_date"])
+        elif asset == "USOIL":
+            F["risk_sentiment"] = _f(-vs, f"{vx}, fear hits oil demand expectations, {note}", "FRED VIXCLS", stress["vix_date"])
     return F

@@ -21,6 +21,7 @@ ASSET_SENSITIVITY = {
     "XAUUSD": {"hawkish": -0.8, "growth": -0.1},
     "US30":   {"hawkish": -0.3, "growth": +0.6},
     "NASDAQ": {"hawkish": -0.7, "growth": +0.3},
+    "USOIL":  {"hawkish": -0.3, "growth": +0.6},
 }
 
 

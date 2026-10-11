@@ -13,7 +13,7 @@ from engines.sessions import to_sast, current_sessions
 from engines.technical import technical_engine
 from engines.vision_scoring import technical_from_charts
 
-ASSETS = ("USD", "XAUUSD", "US30", "NASDAQ")
+ASSETS = ("USD", "XAUUSD", "US30", "NASDAQ", "USOIL")
 
 
 def _jsonable(o):
@@ -40,7 +40,8 @@ def run_bias(ohlc: dict, macro: dict, now=None, mode="LIVE", regime=REGIME, char
         data = ohlc.get(asset, {})
         frames = data.get("frames", {})
         fund = fundamental_engine(asset, build_factors(asset, now, macro.get("events"), macro.get("yields"),
-                                                       macro.get("fed"), macro.get("real"), regime, macro.get("stress")))
+                                                       macro.get("fed"), macro.get("real"), regime, macro.get("stress"),
+                                                       macro.get("oil")))
         if charts and charts.get(asset):
             tech = technical_from_charts(charts[asset], asset, now)
         else:
@@ -118,7 +119,8 @@ def run_fundamental(macro: dict, now=None, regime=REGIME, freshness: float = 1.0
            "regime_assumption": regime, "next_event": next_event(macro.get("events"), now), "markets": {}}
     for asset in ASSETS:
         f = fundamental_engine(asset, build_factors(asset, now, macro.get("events"), macro.get("yields"), macro.get("fed"),
-                                                    macro.get("real"), regime, macro.get("stress")), freshness=freshness)
+                                                    macro.get("real"), regime, macro.get("stress"), macro.get("oil")),
+                               freshness=freshness)
         out["markets"][asset] = {"fundamental": f}
     out["data_errors"] = macro.get("errors", {})
     inputs = _strip_fetched_at({k: v for k, v in macro.items() if k != "errors"})

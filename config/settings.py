@@ -64,7 +64,19 @@ FUNDAMENTAL_WEIGHTS = {
         "risk_sentiment": 0.10,
         "inflation_trend": 0.05,
     },
+    "USOIL": {
+        "inventory_change": 0.25,       # EIA weekly crude stocks ex-SPR (FRED WCESTUS1): draw bullish, build bearish
+        "dollar_strength": 0.20,        # broad dollar index (FRED DTWEXBGS): stronger dollar is a headwind
+        "growth_outlook": 0.15,         # US growth release surprises from the calendar
+        "supply_geopolitics": 0.15,     # OPEC+/sanctions/disruptions: no free automated source yet, shown as missing
+        "production_trend": 0.10,       # EIA weekly US field production (FRED WCRFPUS2): rising output bearish
+        "risk_sentiment": 0.10,         # VIX: fear is a demand headwind
+        "fed_policy_expectations": 0.05,
+    },
 }
+# Scales for one "full-strength" weekly move (assumptions): 5M bbl stock change, 100 kb/d production change,
+# 0.5% broad-dollar change.
+OIL_SCALES = {"inventory_kbbl": 5000.0, "production_kbd": 100.0, "dollar_pct": 0.5}
 
 # Minimum share of total weight that must have data, otherwise DATA UNAVAILABLE
 MIN_DATA_COVERAGE = 0.5

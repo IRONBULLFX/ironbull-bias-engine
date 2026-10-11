@@ -1,5 +1,5 @@
 """Shared classification, confidence and agreement logic. No market logic here."""
-from config.settings import THRESHOLDS
+from config.settings import THRESHOLDS, DAILY_WEIGHTS
 
 UNAVAILABLE = "DATA UNAVAILABLE"
 
@@ -40,6 +40,31 @@ def agreement(fund_bias: str, tech_bias: str) -> str:
     if f == 0 and t == 0:
         return "NO CLEAR DIRECTION"
     return "PARTIAL SIGNAL (one engine neutral)"
+
+
+def daily_bias(fund_score, tech_score, weights=None, thresholds=None) -> dict:
+    """One call for the day from the two independent engines. It never feeds back into either engine.
+    - both available, pointing opposite ways (each beyond the threshold): CONFLICTING, stand aside
+    - both available otherwise: weighted blend
+    - only one available: that engine alone, labelled as such"""
+    w = weights or DAILY_WEIGHTS
+    t = thresholds or THRESHOLDS
+    f_ok, t_ok = fund_score is not None, tech_score is not None
+    if not f_ok and not t_ok:
+        return {"bias": UNAVAILABLE, "score": None, "basis": "no data", "note": "No fundamental data and no charts."}
+    if f_ok and t_ok:
+        if (fund_score >= t["normal"] and tech_score <= -t["normal"]) or (fund_score <= -t["normal"] and tech_score >= t["normal"]):
+            return {"bias": "CONFLICTING", "score": None, "basis": "fundamental + charts",
+                    "note": "Fundamentals and charts point opposite ways. Stand aside until they align."}
+        score = round((w["fundamental"] * fund_score + w["technical"] * tech_score) / (w["fundamental"] + w["technical"]), 1)
+        basis, note = "fundamental + charts", "Blend of the automatic fundamental score and your chart score."
+    elif f_ok:
+        score, basis = round(fund_score, 1), "fundamental only"
+        note = "No chart bias yet. Upload D1 + H4 charts to include the technical side."
+    else:
+        score, basis = round(tech_score, 1), "charts only"
+        note = "Fundamental data unavailable. Based on your charts only."
+    return {"bias": classify(score, t), "score": score, "basis": basis, "note": note}
 
 
 def confidence(coverage: float, freshness: float, factor_agreement: float) -> dict:

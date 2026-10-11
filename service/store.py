@@ -51,6 +51,38 @@ usage = Table(
 )
 
 
+members = Table(
+    "members", meta,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("token_hash", String(64), nullable=False, unique=True),
+    Column("account", String(16), nullable=False, index=True),      # HFM trading account number (needed to re-check)
+    Column("email_hash", String(64), nullable=False),                 # email is never stored, only its hash
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("verified_at", DateTime(timezone=True), nullable=False),
+    Column("revoked", Integer, nullable=False, default=0),
+    Column("revoke_reason", String(100)),
+)
+
+
+releases = Table(
+    "releases", meta,                                   # every released event the feed has shown, kept past the feed's 7-day window
+    Column("id", String(200), primary_key=True),
+    Column("name", String(200), nullable=False),
+    Column("t_utc", DateTime(timezone=True), nullable=False, index=True),
+    Column("forecast", Float), Column("previous", Float), Column("actual", Float),
+    Column("unit", String(10)), Column("impact", String(10)), Column("grp", String(20)),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
+
+def secret_hash(value: str) -> str:
+    return hashlib.sha256(("ironbull-member:" + value).encode()).hexdigest()
+
+
+def email_hash(email: str) -> str:
+    return secret_hash("email:" + str(email or "").strip().casefold())
+
+
 def owner_id(code: str) -> str:
     """Access codes are never stored. Only a short hash identifies the uploader."""
     return hashlib.sha256(("ironbull:" + code).encode()).hexdigest()[:16]
@@ -166,6 +198,70 @@ class Store:
             else:
                 c.execute(insert(usage).values(owner=owner, day=day, count=1))
         return True, ""
+
+    # ---- release memory
+    def upsert_releases(self, events, now):
+        """Stores released events (actual known). A later feed value for the same id (revision) overwrites."""
+        n = 0
+        with self.engine.begin() as c:
+            for e in events or []:
+                if e.actual is None or not e.id:
+                    continue
+                vals = dict(name=e.name, t_utc=e.t_utc, forecast=e.forecast, previous=e.previous, actual=e.actual,
+                            unit=e.unit, impact=e.impact, grp=e.group, updated_at=now)
+                if c.execute(update(releases).where(releases.c.id == e.id).values(**vals)).rowcount == 0:
+                    c.execute(insert(releases).values(id=e.id, **vals))
+                n += 1
+        return n
+
+    def releases_empty(self):
+        with self.engine.connect() as c:
+            return c.execute(select(func.count()).select_from(releases)).scalar() == 0
+
+    def snapshot_payloads(self, now, days, limit=3000):
+        with self.engine.connect() as c:
+            rows = c.execute(select(snapshots.c.payload).where(snapshots.c.kind == "fundamental",
+                                                               snapshots.c.created_at >= now - timedelta(days=days))
+                             .order_by(snapshots.c.id).limit(limit)).all()
+        return [r[0] for r in rows]
+
+    def recent_releases(self, now, days):
+        from data.macro_client import Event
+        with self.engine.connect() as c:
+            rows = c.execute(select(releases).where(releases.c.t_utc >= now - timedelta(days=days),
+                                                    releases.c.t_utc <= now)).mappings().all()
+        return [Event(r["id"], r["name"], _utc(r["t_utc"]), r["forecast"], r["previous"], r["actual"],
+                      r["unit"] or "", r["impact"] or "", r["grp"] or "") for r in rows]
+
+    # ---- HFM members
+    def add_member(self, token, account, email, now):
+        with self.engine.begin() as c:
+            c.execute(insert(members).values(token_hash=secret_hash(token), account=account, email_hash=email_hash(email),
+                                             created_at=now, verified_at=now, revoked=0))
+
+    def member_by_token(self, token):
+        with self.engine.connect() as c:
+            r = c.execute(select(members).where(members.c.token_hash == secret_hash(token))).mappings().first()
+        if not r:
+            return None
+        d = dict(r)
+        d["verified_at"], d["created_at"] = _utc(d["verified_at"]), _utc(d["created_at"])
+        return d
+
+    def touch_member(self, account, now):
+        with self.engine.begin() as c:
+            c.execute(update(members).where(members.c.account == account, members.c.revoked == 0).values(verified_at=now))
+
+    def revoke_account(self, account, reason):
+        with self.engine.begin() as c:
+            c.execute(update(members).where(members.c.account == account, members.c.revoked == 0)
+                      .values(revoked=1, revoke_reason=reason[:100]))
+
+    def member_counts(self):
+        with self.engine.connect() as c:
+            active = c.execute(select(func.count(func.distinct(members.c.account))).where(members.c.revoked == 0)).scalar()
+            revoked = c.execute(select(func.count(func.distinct(members.c.account))).where(members.c.revoked == 1)).scalar()
+        return {"active_accounts": active, "revoked_accounts": revoked}
 
     def used_today(self, owner, now):
         with self.engine.connect() as c:

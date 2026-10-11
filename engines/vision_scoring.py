@@ -72,7 +72,10 @@ def validate_reading(raw, asset: str, tf: str, uploaded_at: datetime, now: datet
     for lv in raw.get("key_levels") or []:
         p = _num((lv or {}).get("price"))
         if isinstance(lv, dict) and lv.get("type") in LEVEL_TYPES and p is not None and lo * 0.98 <= p <= hi * 1.02:
-            levels.append({"type": lv["type"], "price": p})
+            # Label by position, not by what the AI called it: below price = support/demand, above = resistance/supply.
+            zone = lv["type"] in ("supply", "demand")
+            kind = ("demand" if zone else "support") if p < last else ("supply" if zone else "resistance")
+            levels.append({"type": kind, "price": p})
     return {"last": last, "trend": tr, "sequence": seq, "bos": bos, "choch": choch, "swing_high": sh, "swing_low": sl,
             "ema": e, "ema_stack": stack, "rsi": rsi, "macd_hist": hist, "levels": levels[:12],
             "age_hours": round(age_h, 2)}, None

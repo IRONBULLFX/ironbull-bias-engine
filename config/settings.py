@@ -3,7 +3,11 @@
 TIMEZONE = "Africa/Johannesburg"
 
 # score -> bias thresholds (lower bounds)
-THRESHOLDS = {"strong": 70, "normal": 30}
+# Bullish/Bearish from 15, Strongly from 50. Lowered from 30/70 so the terminal gives a daily call when evidence leans
+# one way. Starting assumptions, not validated.
+THRESHOLDS = {"strong": 50, "normal": 15}
+# Daily bias = weighted blend of the two independent engines. Both engines are still shown separately.
+DAILY_WEIGHTS = {"fundamental": 0.5, "technical": 0.5}
 
 INDICATORS = {
     "ema": (20, 50, 200),

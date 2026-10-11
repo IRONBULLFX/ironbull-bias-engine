@@ -63,6 +63,13 @@ main{max-width:1280px;margin:0 auto;padding:20px 24px 48px}
 .mk{font-family:var(--serif);font-size:28px;font-weight:700;line-height:1}
 .mk,.bias,.event-name{font-variant-numeric:lining-nums;font-feature-settings:'lnum' 1}
 .lean{font-size:10.5px;color:var(--sub);margin:-4px 0 6px;letter-spacing:.3px}
+.daily{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;border:1px solid var(--line2);border-radius:3px;padding:12px 14px;background:var(--panel2)}
+.daily .eyebrow{font-size:9.5px}
+.daily-call{display:flex;align-items:baseline;gap:10px}
+.daily-bias{font-family:var(--serif);font-size:26px;font-weight:700;line-height:1;font-variant-numeric:lining-nums}
+.daily-note{font-size:11px;color:var(--sub);text-align:right;max-width:60%}
+.d-daily{margin-bottom:14px;padding:16px 18px}
+@media (max-width:560px){.daily-note{text-align:left;max-width:100%}}
 .link{color:var(--teal);text-decoration:none;font-size:12px}.link:hover{text-decoration:underline}
 .linkbtn{background:none;border:none;padding:0;color:var(--sub);font-size:11.5px;cursor:pointer;text-decoration:underline}
 .mk-sub{font-size:11px;color:var(--sub);margin-top:4px;letter-spacing:.3px}
@@ -189,7 +196,7 @@ svg text{font-family:var(--mono)}
     <p class="foot-note">
       Fundamental bias is calculated automatically from US economic releases, Treasury and real yields, the Fed stance, VIX and credit spreads.
       Technical bias comes from the charts you upload. Claude reads each screenshot and the engine scores it, so treat prices read from a chart as approximate.
-      Scores run from −100 to +100 and measure the weight of evidence. They are not probabilities of a winning trade, and the weights are starting assumptions that have not been validated.
+      Scores run from −100 to +100 and measure the weight of evidence: Bullish/Bearish from ±15, Strongly from ±50. The daily bias blends both engines 50/50, and when they point opposite ways it says stand aside. They are not probabilities of a winning trade, and the weights are starting assumptions that have not been validated.
       Educational analysis only, not financial advice.
     </p>
   </section>
@@ -247,7 +254,7 @@ function biasColor(b){
   return "var(--faint)";
 }
 function title(b){ return b==="DATA UNAVAILABLE" ? b : b.toLowerCase().replace(/(^|\s)\S/g,function(m){return m.toUpperCase();}); }
-function fmtScore(s){ return s==null ? "—" : (s>0?"+":"")+Number(s).toFixed(0); }
+function fmtScore(s){ if(s==null) return "—"; var v=Math.trunc(Number(s)); return (v>0?"+":"")+v; }  // toward zero: shown number always matches the label (-14.6 is Neutral, shows -14)
 function fmtPrice(p){ if(p==null) return "—"; var d = p>=1000?2:p>=10?2:4; return Number(p).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function ago(iso){
   if(!iso) return "never"; var m=(Date.now()-new Date(iso).getTime())/60000;
@@ -374,7 +381,7 @@ function renderCodeBox(){
   $("code-on").classList.toggle("hide", !on);
   if(d && d.hfm_signup_url){ var a=$("hfm-signup"); a.href=d.hfm_signup_url; a.classList.remove("hide"); }
   if(on){
-    var who = !d.member ? "Unlocked" : d.member.kind==="hfm" ? "HFM "+d.member.account_masked : "Admin";
+    var who = d.member && d.member.kind==="hfm" ? "HFM "+d.member.account_masked : "Unlocked";
     $("code-usage").textContent = who+" · "+d.uploads_today+" / "+d.upload_limit+" chart reads today";
     if(!$("code-msg").style.color) setCodeMsg("Your technical bias uses only the charts you upload.");
   }
@@ -382,8 +389,19 @@ function renderCodeBox(){
 
 /* ---------------- render: home cards ---------------- */
 function leanText(e){
-  if(!e || e.score==null || e.bias!=="NEUTRAL" || Math.abs(e.score)<15) return "";
+  if(!e || e.score==null || e.bias!=="NEUTRAL" || Math.abs(e.score)<8) return "";
   return '<div class="lean">leaning '+(e.score<0?"bearish":"bullish")+'</div>';
+}
+function dailyBox(dly, big){
+  if(!dly) return "";
+  var conflict = dly.bias==="CONFLICTING", na = dly.bias==="DATA UNAVAILABLE";
+  var col = conflict ? "var(--amber)" : biasColor(dly.bias);
+  var label = conflict ? "Conflicting · stand aside" : na ? "No data" : title(dly.bias);
+  var basis = dly.basis==="fundamental only" ? "Fundamentals only" : dly.basis==="charts only" ? "Charts only" : dly.basis==="fundamental + charts" ? "Fundamentals + your charts" : "";
+  return '<div class="daily'+(big?' d-daily':'')+'"><div><div class="eyebrow">Daily bias</div>'+
+    '<div class="daily-call" style="margin-top:6px"><span class="daily-bias" style="color:'+col+(big?';font-size:32px':'')+'">'+esc(label)+'</span>'+
+    (dly.score!=null?'<span class="mono" style="font-size:13px">'+fmtScore(dly.score)+'</span>':'')+'</div></div>'+
+    '<div class="daily-note">'+esc(basis)+(basis?'. ':'')+esc(conflict?dly.note:(dly.basis==="fundamental only"?"Upload D1 + H4 charts to include your technical read.":""))+'</div></div>';
 }
 function engineBox(label, e, emptyHint){
   var na = !e || e.score==null;
@@ -413,6 +431,7 @@ function renderGrid(){
     return '<div class="card" tabindex="0" role="button" data-asset="'+a+'" aria-label="Open '+a+' detail">'+
       '<div class="card-head"><div><div class="mk">'+META[a].name+'</div><div class="mk-sub">'+esc(META[a].sub)+'</div></div>'+
       (cp?'<div class="price">'+fmtPrice(cp.p)+'<small>read from your '+cp.tf+' chart</small></div>':'')+'</div>'+
+      dailyBox(m.daily)+
       '<div class="engines">'+engineBox("Fundamental", f)+engineBox("Technical", t, (t&&t.score!=null)?null:techHint(t))+'</div>'+
       '<div class="agree"><span class="chip" style="color:'+ag[0]+';border-color:'+ag[0]+'">'+esc(m.agreement)+'</span><span class="small" style="text-align:right">'+esc(ag[1])+'</span></div>'+
     '</div>';
@@ -434,7 +453,7 @@ function factorRows(rows){
       '<span class="f-num" style="color:'+(isMiss?"var(--faint)":c>0.05?"var(--bull)":c<-0.05?"var(--bear)":"var(--sub)")+'">'+(isMiss?"missing":(c>0?"+":"")+c.toFixed(1))+
       '<span class="faint"> · w '+Math.round(r.weight*100)+'%</span></span></div>'+
       (isMiss?"":'<div class="f-mini">'+miniBar(r.value)+'<span class="mono faint" style="font-size:10px">'+(r.value>0?"+":"")+Number(r.value).toFixed(2)+'</span></div>')+
-      '<div class="f-ev">'+esc(r.evidence||"")+'</div>'+
+      '<div class="f-ev">'+esc(/^no released/.test(r.evidence||"") ? "no release in the last 10 days" : (r.evidence||""))+'</div>'+
       ((r.source||r.as_of)?'<div class="f-src">'+esc(r.source||"")+(r.as_of?" · as of "+esc(r.as_of):"")+'</div>':"")+
     '</div>';
   }).join("");
@@ -445,12 +464,16 @@ function whyBlock(e, kind){
   var pos=rows.filter(function(r){return r.contribution>0.5;}).sort(function(a,b){return b.contribution-a.contribution;});
   var neg=rows.filter(function(r){return r.contribution<-0.5;}).sort(function(a,b){return a.contribution-b.contribution;});
   function li(r){ return '<li><b>'+esc(LABEL[r.name]||r.name)+'</b> ('+(r.contribution>0?"+":"")+r.contribution.toFixed(1)+')</li>'; }
-  var miss=(e.contributions||[]).filter(function(r){return r.status!=="ok";}).map(function(r){return LABEL[r.name]||r.name;});
+  var missRows=(e.contributions||[]).filter(function(r){return r.status!=="ok";});
+  var isRecent=function(r){ return /^no released/.test(r.evidence||""); };
+  var miss=missRows.filter(function(r){return kind==="technical" || !isRecent(r);}).map(function(r){return LABEL[r.name]||r.name;});
+  var quiet=kind==="technical" ? [] : missRows.filter(isRecent).map(function(r){return LABEL[r.name]||r.name;});
   var missTxt = kind==="technical" ? "Timeframes not counted (no valid chart): " : "Not included (no data source yet): ";
   return '<div class="why">'+
     '<div class="eyebrow" style="margin-top:4px">Pushing higher</div>'+(pos.length?'<ul>'+pos.map(li).join("")+'</ul>':'<p class="small">Nothing significant.</p>')+
     '<div class="eyebrow">Pushing lower</div>'+(neg.length?'<ul>'+neg.map(li).join("")+'</ul>':'<p class="small">Nothing significant.</p>')+
     (miss.length?'<p class="small faint">'+missTxt+esc(miss.join(", "))+'.</p>':'')+
+    (quiet.length?'<p class="small faint">No release in the last 10 days: '+esc(quiet.join(", "))+'.</p>':'')+
   '</div>';
 }
 function sparkline(series){
@@ -507,6 +530,7 @@ function renderDetail(){
     '<div class="d-head"><div><div class="mk">'+META[a].name+'</div><div class="mk-sub">'+esc(META[a].sub)+'</div></div>'+
       '<div style="text-align:right"><span class="chip" style="color:'+ag[0]+';border-color:'+ag[0]+'">'+esc(m.agreement)+'</span><div class="small" style="margin-top:6px">'+esc(ag[1])+'</div>'+
       (cp?'<div class="small mono" style="margin-top:4px">'+fmtPrice(cp.p)+' <span class="faint">(read from your '+cp.tf+' chart)</span></div>':'')+'</div></div>'+
+    dailyBox(m.daily, true)+
     '<div class="cols">'+
       '<div>'+
         '<div class="panel sec"><h3><span class="dot ok"></span>Fundamental bias · automatic</h3>'+
@@ -561,7 +585,7 @@ function upload(asset, tf, file){
       if(scored) state.flash[key] = {ok:true,msg:"Chart read and scored."};
       else if(b.accepted) delete state.flash[key];   // reason is shown in the box from the engine
       else state.flash[key] = {ok:false,msg:"Not used: "+(b.reject_reason||"unreadable")};
-      if(state.data){ state.data.markets[asset].technical=b.technical; state.data.markets[asset].agreement=b.agreement; state.data.uploads_today=b.uploads_today; }
+      if(state.data){ var mk=state.data.markets[asset]; mk.technical=b.technical; mk.agreement=b.agreement; if(b.daily) mk.daily=b.daily; state.data.uploads_today=b.uploads_today; }
     } else if(res.status===401){ setCode(null); state.flash[key]={ok:false,msg:"Access code no longer valid."}; }
     else { state.flash[key]={ok:false,msg:(b.detail||("Upload failed (HTTP "+res.status+")"))}; }
     render(); loadHistory(asset);

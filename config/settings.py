@@ -65,11 +65,11 @@ FUNDAMENTAL_WEIGHTS = {
         "inflation_trend": 0.05,
     },
     "USOIL": {
-        "inventory_change": 0.25,       # EIA weekly crude stocks ex-SPR (FRED WCESTUS1): draw bullish, build bearish
+        "inventory_change": 0.25,       # EIA weekly crude stocks ex-SPR (EIA API PET.WCESTUS1.W): draw bullish, build bearish
         "dollar_strength": 0.20,        # broad dollar index (FRED DTWEXBGS): stronger dollar is a headwind
         "growth_outlook": 0.15,         # US growth release surprises from the calendar
         "supply_geopolitics": 0.15,     # OPEC+/sanctions/disruptions: no free automated source yet, shown as missing
-        "production_trend": 0.10,       # EIA weekly US field production (FRED WCRFPUS2): rising output bearish
+        "production_trend": 0.10,       # EIA weekly US field production (EIA API PET.WCRFPUS2.W): rising output bearish
         "risk_sentiment": 0.10,         # VIX: fear is a demand headwind
         "fed_policy_expectations": 0.05,
     },

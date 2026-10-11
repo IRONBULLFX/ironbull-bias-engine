@@ -122,12 +122,12 @@ def build_factors(asset: str, now: datetime, events=None, yields=None, fed=None,
             F["inventory_change"] = _f(_clamp(-d / OIL_SCALES["inventory_kbbl"]),
                                        f"EIA crude stocks ex-SPR {oil['stocks'] / 1000:.1f}M bbl, {d / 1000:+.1f}M w/w "
                                        f"({'draw supports price' if d < 0 else 'build weighs on price'}); change vs prior week, no consensus",
-                                       "FRED WCESTUS1 (EIA)", oil.get("stocks_date"))
+                                       "EIA PET.WCESTUS1.W", oil.get("stocks_date"))
         if oil and oil.get("production") is not None and oil.get("production_prev") is not None:
             d = oil["production"] - oil["production_prev"]              # thousand barrels/day
             F["production_trend"] = _f(_clamp(-d / OIL_SCALES["production_kbd"]),
                                        f"US crude output {oil['production'] / 1000:.2f}M b/d ({d:+.0f}k b/d w/w), rising output is bearish",
-                                       "FRED WCRFPUS2 (EIA)", oil.get("production_date"))
+                                       "EIA PET.WCRFPUS2.W", oil.get("production_date"))
         if oil and oil.get("dollar") and oil.get("dollar_prev"):
             pct = (oil["dollar"] / oil["dollar_prev"] - 1) * 100
             F["dollar_strength"] = _f(_clamp(-pct / OIL_SCALES["dollar_pct"]),

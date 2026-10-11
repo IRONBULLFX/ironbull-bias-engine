@@ -50,23 +50,34 @@ def market_stress(key=None, getter=get_json, clock=lambda: datetime.now(timezone
     return out, None
 
 
-OIL_SERIES = {"stocks": "WCESTUS1", "production": "WCRFPUS2", "dollar": "DTWEXBGS"}
+EIA_SERIES = {"stocks": "PET.WCESTUS1.W", "production": "PET.WCRFPUS2.W"}   # EIA weekly, official source
 
 
-def oil_data(key=None, getter=get_json, clock=lambda: datetime.now(timezone.utc)):
-    """EIA weekly crude stocks ex-SPR (thousand bbl), EIA weekly US crude production (thousand b/d) and the Fed's
-    broad dollar index, last two observations each. Each series is independent: one failing does not drop the others.
-    Returns (data | None, error | None); data is None only when every series failed."""
+def oil_data(key=None, getter=get_json, clock=lambda: datetime.now(timezone.utc), eia_key=None, eia_getter=None):
+    """EIA weekly crude stocks ex-SPR (thousand bbl) and US crude production (thousand b/d) from the EIA API, plus the
+    Fed's broad dollar index from FRED, last two observations each. Each series is independent: one failing does not
+    drop the others. Returns (data | None, error | None); data is None only when every series failed."""
+    from data.eia import weekly_series
     key = key or os.environ.get("FRED_KEY")
-    if not key:
-        return None, "FRED_KEY not set"
+    eia_key = eia_key if eia_key is not None else os.environ.get("EIA_API_KEY", "")
     out, errors = {"fetched_at": clock()}, []
-    for name, sid in OIL_SERIES.items():
-        obs, err = last_observations(sid, key, 2, getter)
+    if eia_key:
+        for name, sid in EIA_SERIES.items():
+            obs, err = weekly_series(sid, eia_key, 2, **({"getter": eia_getter} if eia_getter else {}))
+            if obs is None:
+                errors.append(f"EIA {sid}: {err}")
+                continue
+            out[name], out[name + "_prev"], out[name + "_date"] = obs[0][1], obs[1][1], obs[0][0]
+    else:
+        errors.append("EIA_API_KEY not set (crude stocks and production)")
+    if key:
+        obs, err = last_observations("DTWEXBGS", key, 2, getter)
         if obs is None:
-            errors.append(f"{sid}: {err}")
-            continue
-        out[name], out[name + "_prev"], out[name + "_date"] = obs[0][1], obs[1][1], obs[0][0]
+            errors.append(f"DTWEXBGS: {err}")
+        else:
+            out["dollar"], out["dollar_prev"], out["dollar_date"] = obs[0][1], obs[1][1], obs[0][0]
+    else:
+        errors.append("FRED_KEY not set")
     if len(out) == 1:
         return None, "; ".join(errors)
     return out, ("; ".join(errors) or None)
